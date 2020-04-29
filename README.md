@@ -7,7 +7,7 @@ Program provides the ability for users to mask a set of images from a specified 
 - OpenCV
 - Numpy
 
-It is recommended to install anaconda to facilitate the management of packages. https://www.anaconda.com/distribution/. Furthermore, you may create and segragate environments to avoid package dependency conflicts between projects.
+It is recommended to install anaconda to facilitate the management of packages. https://www.anaconda.com/distribution/. Furthermore, you may create and segregate environments to avoid package dependency conflicts between projects.
 
 ### Steps
 1) Open anaconda command line prompt
