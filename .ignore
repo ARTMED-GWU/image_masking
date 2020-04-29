@@ -1,0 +1,6 @@
+# Ignore image files in this directory
+*.png
+*.jpg
+
+# Ignore listed directories
+__pycache__
