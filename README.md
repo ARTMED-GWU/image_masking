@@ -11,11 +11,11 @@ It is recommended to install anaconda to facilitate the management of packages. 
 
 ### Steps
 1) Open anaconda command line prompt
-2) Creating new environment (optional): 'conda create --name new_env_name'
+2) Creating new environment (optional): 'conda create --name new_env_name python=3.7'
 3) Activate environment (optional): 'conda activate new_env_name'
-4) Install Python on new environment: 'conda install -c anaconda python'
+4) Install Python on new environment (not needed if step 2 executed): 'conda install -c anaconda python'
 5) Install OpenCV: 'conda install -c conda-forge opencv'
-6) Install Numpy (needed only if had not been done as part of step 5): 'conda install -c conda-forge numpy'
+6) Install Numpy (not needed if step 5 executed): 'conda install -c conda-forge numpy'
 
 ## Usage
 
