@@ -23,6 +23,7 @@ import logging
 
 import cv2 # Import the OpenCV library
 import numpy as np # Import Numpy library
+import matplotlib.pyplot as plt
 from common import Sketcher
 from os.path import join
 from os import listdir, mkdir
@@ -35,7 +36,35 @@ from os import listdir, mkdir
  
 dir_img = "data/imgs/"
 dir_outmask = "data/masks/"
- 
+
+def createMask(image, mask, kernel):
+    debug = False
+    
+    kernel2 = np.ones((3,3),np.uint8)
+    bg = cv2.dilate(mask, kernel2, iterations=20)
+
+    fg = cv2.erode(mask, None)
+    
+    fg = np.uint8(fg)
+    unknown = cv2.subtract(bg,fg)
+    
+    ret, markers = cv2.connectedComponents(fg)
+    # Add one to all labels so that sure background is not 0, but 1
+    markers = markers+1
+    # Now, mark the region of unknown with zero
+    markers[unknown==255] = 0
+    
+    if (debug):
+        plt.imshow(markers,cmap='jet')
+        plt.show()
+    
+    finalmask = cv2.watershed(image,markers)
+    finalmask[finalmask == 1] = 0
+    finalmask[finalmask == -1] = 0
+    finalmask[finalmask != 0] = 255
+    
+    return finalmask.astype(np.uint8)
+
 def main(viz):
     
     try:
@@ -80,21 +109,26 @@ def main(viz):
         lower_white = np.array([255,255,255])
         upper_white = np.array([255,255,255])
      
-        # Create the mask
-        mask = cv2.inRange(image_mark, lower_white, upper_white)
+        # Create base mask
+        usermask = cv2.inRange(image_mark, lower_white, upper_white)
     
         # Remove the small white regions
-        kernel = np.ones((5,5),np.uint8)
-        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        kernel = np.ones((3,3),np.uint8)
+        usermask = cv2.morphologyEx(usermask, cv2.MORPH_OPEN, kernel)
+        
+        cv2.imshow('mask', usermask)
+        
+        out = createMask(image, usermask, kernel)
+        cv2.imshow('test', out)
         
         #Save the mask
-        cv2.imwrite(join(dir_outmask, img_file), mask)
+        cv2.imwrite(join(dir_outmask, img_file), out)
      
         # Display images, used for debugging
         if (viz):
 
             # Create the inverted mask
-            mask_inv = cv2.bitwise_not(mask)
+            mask_inv = cv2.bitwise_not(out)
          
             # Convert to grayscale image
             gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
@@ -104,7 +138,7 @@ def main(viz):
             image = image[0:rows, 0:cols]
          
             # Bitwise-OR mask and original image
-            colored_portion = cv2.bitwise_or(image, image, mask = mask)
+            colored_portion = cv2.bitwise_or(image, image, mask = out)
             colored_portion = colored_portion[0:rows, 0:cols]
          
             # Bitwise-OR inverse mask and grayscale image
@@ -115,14 +149,15 @@ def main(viz):
             overlay = colored_portion + gray_portion
             
             # Create a table showing input image, mask, and overlay
-            mask = np.stack((mask,)*3, axis=-1)
-            table_of_images = np.concatenate((image, mask, overlay), axis=1)
+            mask = np.stack((out,)*3, axis=-1)
+            usermask = np.stack((usermask,)*3, axis=-1)
             
-            cv2.imshow('Table of Images', table_of_images)
+            table_of_images = np.concatenate((image, usermask, mask, overlay), axis=1)
+            cv2.imshow('Input Image / User Mask / Watershed Mask / Overlay', table_of_images)
             
             while True:
                 cv2.waitKey(100) # Wait for a keyboard event
-                if cv2.getWindowProperty('Table of Images',cv2.WND_PROP_VISIBLE) < 1:
+                if cv2.getWindowProperty('Input Image / User Mask / Watershed Mask / Overlay',cv2.WND_PROP_VISIBLE) < 1:
                     break
         
         cv2.destroyAllWindows()

@@ -105,7 +105,7 @@ class Sketcher:
  
         if self.prev_pt and flags & cv.EVENT_FLAG_LBUTTON:
             for dst, color in zip(self.dests, self.colors_func()):
-                cv.line(dst, self.prev_pt, pt, color, 2)
+                cv.line(dst, self.prev_pt, pt, color, 3)
             self.dirty = True
             self.prev_pt = pt
             self.show()
