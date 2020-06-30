@@ -26,7 +26,7 @@ import cv2 # Import the OpenCV library
 import numpy as np # Import Numpy library
 import matplotlib.pyplot as plt
 from common import Sketcher
-from os.path import join
+from os.path import join, splitext
 from os import listdir, mkdir
  
 # Based on Image Masking Using OpenCV project by Addison Sears-Collins
@@ -36,8 +36,8 @@ from os import listdir, mkdir
 #Takes all images from the specified images directory. If a mask exists for such
 #image it will use this as the base mask which user can modify.
  
-dir_img = "data/imgs/"
-dir_outmask = "data/masks/"
+dir_img = "../data/imgs/"
+dir_outmask = "../data/masks/"
 
 def createMask(image, mask, debug, ws):
     
@@ -52,7 +52,8 @@ def createMask(image, mask, debug, ws):
     fg = np.uint8(fg)
     unknown = cv2.subtract(bg,fg)
     
-    ret, markers = cv2.connectedComponents(fg)
+    markers = fg.astype('int32')
+    markers[markers==255] = 1
     # Add one to all labels so that sure background is not 0, but 1
     markers = markers+1
     # Now, mark the region of unknown with zero
@@ -69,13 +70,13 @@ def createMask(image, mask, debug, ws):
     
     return finalmask.astype(np.uint8)
 
-def sketchMask(image, mask = None):
+def sketchMask(image, image_name, mask = None):
     
     orig_mask = mask if mask is not None else np.zeros((image.shape[0], image.shape[1]), image.dtype)
     image_mask = orig_mask.copy() 
     
     # Sketch a mask
-    sketch = Sketcher('Image', [image, image_mask])
+    sketch = Sketcher(image_name, [image, image_mask])
     ws = False
     n = False
     while True:
@@ -84,7 +85,6 @@ def sketchMask(image, mask = None):
             n = True;
             break
         if ch == ord('f'): # f - consider as final mask for the image
-            ws = False
             break
         if ch == ord('w'): # w - mask the image and apply watershed
             ws = True
@@ -92,10 +92,10 @@ def sketchMask(image, mask = None):
         if ch == ord(' '): # SPACE - reset the inpainting mask
             image_mask[:] = orig_mask
             sketch.show()
-        if cv2.getWindowProperty('Image',cv2.WND_PROP_VISIBLE) < 1:
+        if cv2.getWindowProperty(image_name,cv2.WND_PROP_VISIBLE) < 1:
             n = True
             break
-        
+    
     cv2.destroyAllWindows()
     
     return image_mask, n, ws
@@ -161,8 +161,9 @@ def main(debug):
         # Load the image and store into a variable
         image = cv2.imread(join(dir_img, img_file))
         image = cv2.resize(image, (512,512)) #Use scaling instead of constant.
+        f_n = splitext(img_file)[0]
      
-        image_mask, n, ws = sketchMask(image, mask)
+        image_mask, n, ws = sketchMask(image, f_n, mask = mask)
         
         if n:
             continue
@@ -175,15 +176,15 @@ def main(debug):
         # Display images, used for refining the mask
         window_name = displayTable(image, out, image_mask) if ws else displayTable(image, out) 
         
-        print("If wish to refine mask press the 'r' key")
+        print("If wish to refine mask press the 'r' key. Otherwise press 'n' for next image")
         while True:
             ch = cv2.waitKey(100) # Wait for a keyboard event
             if ch == ord('r'):
-                out, n, ws = sketchMask(image, out)
+                out, n, ws = sketchMask(image, f_n, mask = out)
                 out = createMask(image, out, debug, ws)                
                 window_name = displayTable(image, out)
                 
-            if cv2.getWindowProperty(window_name,cv2.WND_PROP_VISIBLE) < 1:
+            if ch == ord('n') or cv2.getWindowProperty(window_name,cv2.WND_PROP_VISIBLE) < 1:
                 break
         
         cv2.destroyAllWindows()

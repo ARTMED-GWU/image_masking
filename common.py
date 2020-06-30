@@ -15,7 +15,7 @@ class Sketcher:
         self.windowname = windowname
         self.dests = dests
         self.show()
-        cv2.createTrackbar('Line size', self.windowname, self.size, self.max_slider_size, self.on_trackbar)
+        cv2.createTrackbar('Line thickness', self.windowname, self.size, self.max_slider_size, self.on_trackbar)
         cv2.setMouseCallback(self.windowname, self.on_mouse)
  
     def show(self):

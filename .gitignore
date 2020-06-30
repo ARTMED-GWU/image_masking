@@ -5,3 +5,5 @@
 # Ignore listed directories
 __pycache__
 images
+build
+dist
