@@ -6,9 +6,6 @@ Welcome to the Image Masking Program!
 This program allows users to highlight a specific 
 object within an image by masking it.
  
-Usage:
-  image_masking.py [-h] [-d]
- 
 Keys:
   f     - consider as final mask
   w     - mask the image and apply watershed
@@ -91,6 +88,9 @@ def sketchMask(image, image_name, mask = None):
         if ch == ord('w'): # w - mask the image and apply watershed
             ws = True
             break
+        if ch == ord('s'): # s - save current sketching state
+            orig_mask[:] = image_mask
+            sketch.show()
         if ch == ord(' '): # SPACE - reset the inpainting mask
             image_mask[:] = orig_mask
             sketch.show()
