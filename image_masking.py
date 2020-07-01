@@ -12,6 +12,7 @@ Usage:
 Keys:
   f     - consider as final mask
   w     - mask the image and apply watershed
+  n     - go to next image
   SPACE - reset the inpainting mask
   ESC   - exit
 '''
@@ -21,13 +22,14 @@ from __future__ import print_function
  
 import argparse
 import logging
+import pickle
 
 import cv2 # Import the OpenCV library
 import numpy as np # Import Numpy library
 import matplotlib.pyplot as plt
 from common import Sketcher
-from os.path import join, splitext
-from os import listdir, mkdir
+from os.path import join, splitext, exists
+from os import listdir, mkdir, remove
  
 # Based on Image Masking Using OpenCV project by Addison Sears-Collins
 # Python version: 3.7
@@ -38,6 +40,7 @@ from os import listdir, mkdir
  
 dir_img = "../data/imgs/"
 dir_outmask = "../data/masks/"
+state_file = "state.data"
 
 def createMask(image, mask, debug, ws):
     
@@ -82,8 +85,7 @@ def sketchMask(image, image_name, mask = None):
     while True:
         ch = cv2.waitKey(100)
         if ch == 27: # ESC - exit
-            n = True;
-            break
+            exit()
         if ch == ord('f'): # f - consider as final mask for the image
             break
         if ch == ord('w'): # w - mask the image and apply watershed
@@ -92,7 +94,7 @@ def sketchMask(image, image_name, mask = None):
         if ch == ord(' '): # SPACE - reset the inpainting mask
             image_mask[:] = orig_mask
             sketch.show()
-        if cv2.getWindowProperty(image_name,cv2.WND_PROP_VISIBLE) < 1:
+        if ch == ord('n') or cv2.getWindowProperty(image_name,cv2.WND_PROP_VISIBLE) < 1:
             n = True
             break
     
@@ -138,7 +140,7 @@ def displayTable(image, mask, usermask = None):
         cv2.imshow(window_name, table_of_images)
         return window_name
 
-def main(debug):
+def main(proc_imgs, debug=False, skip=False):
     
     try:
         mkdir(dir_outmask)
@@ -149,9 +151,10 @@ def main(debug):
                     if not file.startswith('.')]
         pass
     
-    for img_file in listdir(dir_img):
-        if  img_file.startswith('.'):
-            continue
+    img_files = [file for file in listdir(dir_img)
+                    if not file.startswith('.') and (skip or not file in proc_imgs) ]
+    
+    for img_file in img_files:
         
         mask = None
         if masks and img_file in masks:
@@ -179,11 +182,12 @@ def main(debug):
         print("If wish to refine mask press the 'r' key. Otherwise press 'n' for next image")
         while True:
             ch = cv2.waitKey(100) # Wait for a keyboard event
+            if ch == 27: # ESC - exit
+                exit()
             if ch == ord('r'):
                 out, n, ws = sketchMask(image, f_n, mask = out)
                 out = createMask(image, out, debug, ws)                
                 window_name = displayTable(image, out)
-                
             if ch == ord('n') or cv2.getWindowProperty(window_name,cv2.WND_PROP_VISIBLE) < 1:
                 break
         
@@ -191,17 +195,36 @@ def main(debug):
         
         #Save the mask
         cv2.imwrite(join(dir_outmask, img_file), out)
+        
+        #Save state of processed images
+        proc_imgs.add(img_file)
+        with open(state_file, 'wb') as fp:
+            pickle.dump(proc_imgs,fp)
 
 def get_args():
     parser = argparse.ArgumentParser(description='Image masking',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-d', '--debug', action='store_true',
                         help='Enables debugging mode', dest='debug', default=False)
+    parser.add_argument('-s', '--skip_state', action='store_true',
+                        help='Ignores list of processed images', dest='skip', default=False)
+    parser.add_argument('-r', '--reset_state', action='store_true',
+                        help='Resets state of processed images', dest='reset', default=False)
     
     return parser.parse_args()
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     args = get_args()
+    
+    img_list = set()
+    if exists(state_file):
+        if args.reset:
+            remove(state_file)
+        else:
+            with open(state_file, 'rb') as fr:
+                img_list = pickle.load(fr)
+    
     print(__doc__)
-    main(debug=args.debug)
+    
+    main(img_list, debug=args.debug, skip=args.skip)
