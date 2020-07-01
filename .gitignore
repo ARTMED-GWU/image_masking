@@ -7,3 +7,6 @@ __pycache__
 images
 build
 dist
+
+#Ignore state
+state.data
