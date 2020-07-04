@@ -9,6 +9,7 @@ object within an image by masking it.
 Keys:
   f     - consider as final mask
   w     - mask the image and apply watershed
+  s     - save current sketching state
   n     - go to next image
   SPACE - reset the inpainting mask
   ESC   - exit
@@ -24,9 +25,10 @@ import pickle
 import cv2 # Import the OpenCV library
 import numpy as np # Import Numpy library
 import matplotlib.pyplot as plt
-from common import Sketcher
+from common import Sketcher, DilatedSketcher, maskOverlay
 from os.path import join, splitext, exists
 from os import listdir, mkdir, remove
+from sys import exit
  
 # Based on Image Masking Using OpenCV project by Addison Sears-Collins
 # Python version: 3.7
@@ -35,8 +37,8 @@ from os import listdir, mkdir, remove
 #Takes all images from the specified images directory. If a mask exists for such
 #image it will use this as the base mask which user can modify.
  
-dir_img = "../data/imgs/"
-dir_outmask = "../data/masks/"
+dir_img = "data/imgs/"
+dir_outmask = "data/masks/"
 state_file = "state.data"
 
 def createMask(image, mask, debug, ws):
@@ -44,13 +46,11 @@ def createMask(image, mask, debug, ws):
     if not(ws):
       return mask.astype(np.uint8)         
     
-    kernel = np.ones((3,3),np.uint8)
-    bg = cv2.dilate(mask, kernel, iterations=15)
-
+    bg = cv2.dilate(mask, None, iterations=15)
     fg = cv2.erode(mask, None)
+    bg2 = sketchMask(image, "DilatedMask", bg, fg)[0]
     
-    fg = np.uint8(fg)
-    unknown = cv2.subtract(bg,fg)
+    unknown = cv2.subtract(bg2,fg)
     
     markers = fg.astype('int32')
     markers[markers==255] = 1
@@ -70,22 +70,28 @@ def createMask(image, mask, debug, ws):
     
     return finalmask.astype(np.uint8)
 
-def sketchMask(image, image_name, mask = None):
+def sketchMask(image, image_name, mask = None, fg = None):
     
     orig_mask = mask if mask is not None else np.zeros((image.shape[0], image.shape[1]), image.dtype)
-    image_mask = orig_mask.copy() 
+    image_mask = orig_mask.copy()
     
     # Sketch a mask
-    sketch = Sketcher(image_name, [image, image_mask])
+    if fg is None:
+        sketch = Sketcher(image_name, [image, image_mask])
+    # Sketch dilated mask
+    else:
+        sketch = DilatedSketcher(image_name, [image, image_mask, fg])
+        
     ws = False
     n = False
     while True:
         ch = cv2.waitKey(100)
         if ch == 27: # ESC - exit
+            cv2.destroyAllWindows()
             exit()
         if ch == ord('f'): # f - consider as final mask for the image
             break
-        if ch == ord('w'): # w - mask the image and apply watershed
+        if ch == ord('w') and fg is None: # w - mask the image and apply watershed
             ws = True
             break
         if ch == ord('s'): # s - save current sketching state
@@ -100,7 +106,7 @@ def sketchMask(image, image_name, mask = None):
     
     cv2.destroyAllWindows()
     
-    return image_mask, n, ws
+    return sketch.dests[1], n, ws
 
 def displayTable(image, mask, usermask = None):
     
@@ -179,10 +185,11 @@ def main(proc_imgs, debug=False, skip=False):
         # Display images, used for refining the mask
         window_name = displayTable(image, out, image_mask) if ws else displayTable(image, out) 
         
-        print("If wish to refine mask press the 'r' key. Otherwise press 'n' for next image")
+        logging.info("If wish to refine mask press the 'r' key. Otherwise press 'n' for next image")
         while True:
             ch = cv2.waitKey(100) # Wait for a keyboard event
             if ch == 27: # ESC - exit
+                cv2.destroyAllWindows()
                 exit()
             if ch == ord('r'):
                 out, n, ws = sketchMask(image, f_n, mask = out)
@@ -200,6 +207,9 @@ def main(proc_imgs, debug=False, skip=False):
         proc_imgs.add(img_file)
         with open(state_file, 'wb') as fp:
             pickle.dump(proc_imgs,fp)
+    
+    logging.info("No further images to be processed.\n"
+                     "If wish to reset state run the program with -r argument or to ignore state with -s argument.")
 
 def get_args():
     parser = argparse.ArgumentParser(description='Image masking',
