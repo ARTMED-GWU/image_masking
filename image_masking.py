@@ -21,11 +21,13 @@ from __future__ import print_function
 import argparse
 import logging
 import pickle
-
-import cv2 # Import the OpenCV library
-import numpy as np # Import Numpy library
+import cv2
+import fnmatch
+import yaml
+import numpy as np
 import matplotlib.pyplot as plt
-from common import Sketcher, DilatedSketcher, maskOverlay
+
+from common import Sketcher, DilatedSketcher
 from os.path import join, splitext, exists
 from os import listdir, mkdir, remove
 from sys import exit
@@ -40,6 +42,73 @@ from sys import exit
 dir_img = "data/imgs/"
 dir_outmask = "data/masks/"
 state_file = "state.data"
+
+def main(proc_imgs, debug=False, skip=False, ffilter=None):
+    
+    try:
+        mkdir(dir_outmask)
+        masks = []
+        logging.info("Created {} directory".format(dir_outmask))
+    except OSError:
+        masks =  [file for file in listdir(dir_outmask)
+                    if not file.startswith('.')]
+        pass
+    
+    img_files = [file for file in listdir(dir_img)
+                    if not file.startswith('.') 
+                    and (skip or not file in proc_imgs) 
+                    and (ffilter is None or fnmatch.fnmatch(file,ffilter))]
+    
+    for img_file in img_files:
+        
+        mask = None
+        if masks and img_file in masks:
+            mask = cv2.imread(join(dir_outmask, img_file), cv2.IMREAD_GRAYSCALE)
+            mask = cv2.resize(mask, (512,512))
+            
+        # Load the image and store into a variable
+        image = cv2.imread(join(dir_img, img_file))
+        image = cv2.resize(image, (512,512)) #Use scaling instead of constant.
+        f_n = splitext(img_file)[0]
+     
+        image_mask, n, ws = sketchMask(image, f_n, mask = mask)
+        
+        if n:
+            continue
+
+        out = createMask(image, image_mask, debug, ws)
+        
+        if debug:
+            cv2.imshow('Mask', out)
+     
+        # Display images, used for refining the mask
+        window_name = displayTable(image, out, image_mask) if ws else displayTable(image, out) 
+        
+        logging.info("If wish to refine mask press the 'r' key. Otherwise press 'n' for next image")
+        while True:
+            ch = cv2.waitKey(100) # Wait for a keyboard event
+            if ch == 27: # ESC - exit
+                cv2.destroyAllWindows()
+                exit()
+            if ch == ord('r'):
+                out, n, ws = sketchMask(image, f_n, mask = out)
+                out = createMask(image, out, debug, ws)                
+                window_name = displayTable(image, out)
+            if ch == ord('n') or cv2.getWindowProperty(window_name,cv2.WND_PROP_VISIBLE) < 1:
+                break
+        
+        cv2.destroyAllWindows()
+        
+        #Save the mask
+        cv2.imwrite(join(dir_outmask, img_file), out)
+        
+        #Save state of processed images
+        proc_imgs.add(img_file)
+        with open(state_file, 'wb') as fp:
+            pickle.dump(proc_imgs,fp)
+    
+    logging.info("No further images to be processed.\n"
+                     "If wish to reset state run the program with -r argument or to ignore state with -s argument.")
 
 def createMask(image, mask, debug, ws):
     
@@ -146,71 +215,6 @@ def displayTable(image, mask, usermask = None):
         cv2.imshow(window_name, table_of_images)
         return window_name
 
-def main(proc_imgs, debug=False, skip=False):
-    
-    try:
-        mkdir(dir_outmask)
-        masks = []
-        logging.info("Created {} directory".format(dir_outmask))
-    except OSError:
-        masks =  [file for file in listdir(dir_outmask)
-                    if not file.startswith('.')]
-        pass
-    
-    img_files = [file for file in listdir(dir_img)
-                    if not file.startswith('.') and (skip or not file in proc_imgs) ]
-    
-    for img_file in img_files:
-        
-        mask = None
-        if masks and img_file in masks:
-            mask = cv2.imread(join(dir_outmask, img_file), cv2.IMREAD_GRAYSCALE)
-            mask = cv2.resize(mask, (512,512))
-            
-        # Load the image and store into a variable
-        image = cv2.imread(join(dir_img, img_file))
-        image = cv2.resize(image, (512,512)) #Use scaling instead of constant.
-        f_n = splitext(img_file)[0]
-     
-        image_mask, n, ws = sketchMask(image, f_n, mask = mask)
-        
-        if n:
-            continue
-
-        out = createMask(image, image_mask, debug, ws)
-        
-        if debug:
-            cv2.imshow('Mask', out)
-     
-        # Display images, used for refining the mask
-        window_name = displayTable(image, out, image_mask) if ws else displayTable(image, out) 
-        
-        logging.info("If wish to refine mask press the 'r' key. Otherwise press 'n' for next image")
-        while True:
-            ch = cv2.waitKey(100) # Wait for a keyboard event
-            if ch == 27: # ESC - exit
-                cv2.destroyAllWindows()
-                exit()
-            if ch == ord('r'):
-                out, n, ws = sketchMask(image, f_n, mask = out)
-                out = createMask(image, out, debug, ws)                
-                window_name = displayTable(image, out)
-            if ch == ord('n') or cv2.getWindowProperty(window_name,cv2.WND_PROP_VISIBLE) < 1:
-                break
-        
-        cv2.destroyAllWindows()
-        
-        #Save the mask
-        cv2.imwrite(join(dir_outmask, img_file), out)
-        
-        #Save state of processed images
-        proc_imgs.add(img_file)
-        with open(state_file, 'wb') as fp:
-            pickle.dump(proc_imgs,fp)
-    
-    logging.info("No further images to be processed.\n"
-                     "If wish to reset state run the program with -r argument or to ignore state with -s argument.")
-
 def get_args():
     parser = argparse.ArgumentParser(description='Image masking',
                                      formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -220,13 +224,19 @@ def get_args():
                         help='Ignores list of processed images', dest='skip', default=False)
     parser.add_argument('-r', '--reset_state', action='store_true',
                         help='Resets state of processed images', dest='reset', default=False)
-    
+    parser.add_argument('-c', '--configfile', type=str,
+                        help='Configuration file', dest='config', default='config.yaml')
     return parser.parse_args()
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     args = get_args()
-    
+
+    if exists(args.config):
+        config = yaml.safe_load(open(args.config, 'r'))
+    else:
+        config = {}
+        
     img_list = set()
     if exists(state_file):
         if args.reset:
@@ -237,4 +247,4 @@ if __name__ == '__main__':
     
     print(__doc__)
     
-    main(img_list, debug=args.debug, skip=args.skip)
+    main(img_list, debug=args.debug, skip=args.skip, **config)
