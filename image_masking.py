@@ -78,6 +78,10 @@ def main(proc_imgs, debug=False, skip=False, ffilter=None):
 
         out = createMask(image, image_mask, debug, ws)
         
+        kernel = np.ones((3,3),np.uint8)
+        out = cv2.morphologyEx(out, cv2.MORPH_OPEN, kernel) # removing noise
+        out = cv2.morphologyEx(out, cv2.MORPH_CLOSE, kernel) #closing holes
+        
         if debug:
             cv2.imshow('Mask', out)
      
