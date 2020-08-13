@@ -11,4 +11,4 @@ window_size:
 dir_img: 'data/imgs'
 
 #Directory of masks where they will be saved at. (e.g. 'data/masks')
-dir_outmask: 'data/mask'
+dir_outmask: 'data/masks'
