@@ -39,11 +39,17 @@ from sys import exit
 #Takes all images from the specified images directory. If a mask exists for such
 #image it will use this as the base mask which user can modify.
  
-dir_img = "data/imgs/"
-dir_outmask = "data/masks/"
 state_file = "state.data"
 
-def main(proc_imgs, debug=False, skip=False, ffilter=None):
+def main(proc_imgs, dir_img, dir_outmask, debug=False, skip=False, ffilter=None, window_size=None):
+    
+    assert dir_img is not None and dir_outmask is not None, f'Both dir_img and dir_outmask should not be set to None. Check config.yaml'
+        
+    global size
+    if window_size is not None:
+        size = window_size
+    else:
+        size = {'width': 512, 'height':512}
     
     try:
         mkdir(dir_outmask)
@@ -55,8 +61,8 @@ def main(proc_imgs, debug=False, skip=False, ffilter=None):
         pass
     
     img_files = [file for file in listdir(dir_img)
-                    if not file.startswith('.') 
-                    and (skip or not file in proc_imgs) 
+                    if not file.startswith('.')
+                    and (skip or not file in proc_imgs)
                     and (ffilter is None or fnmatch.fnmatch(file,ffilter))]
     
     for img_file in img_files:
@@ -64,11 +70,10 @@ def main(proc_imgs, debug=False, skip=False, ffilter=None):
         mask = None
         if masks and img_file in masks:
             mask = cv2.imread(join(dir_outmask, img_file), cv2.IMREAD_GRAYSCALE)
-            mask = cv2.resize(mask, (512,512))
             
         # Load the image and store into a variable
         image = cv2.imread(join(dir_img, img_file))
-        image = cv2.resize(image, (512,512)) #Use scaling instead of constant.
+        
         f_n = splitext(img_file)[0]
      
         image_mask, n, ws = sketchMask(image, f_n, mask = mask)
@@ -96,7 +101,7 @@ def main(proc_imgs, debug=False, skip=False, ffilter=None):
                 exit()
             if ch == ord('r'):
                 out, n, ws = sketchMask(image, f_n, mask = out)
-                out = createMask(image, out, debug, ws)                
+                out = createMask(image, out, debug, ws)              
                 window_name = displayTable(image, out)
             if ch == ord('n') or cv2.getWindowProperty(window_name,cv2.WND_PROP_VISIBLE) < 1:
                 break
@@ -104,7 +109,7 @@ def main(proc_imgs, debug=False, skip=False, ffilter=None):
         cv2.destroyAllWindows()
         
         #Save the mask
-        cv2.imwrite(join(dir_outmask, img_file), out)
+        cv2.imwrite(join(dir_outmask, img_file), out) #Maybe look at having it save as PNG.
         
         #Save state of processed images
         proc_imgs.add(img_file)
@@ -150,10 +155,10 @@ def sketchMask(image, image_name, mask = None, fg = None):
     
     # Sketch a mask
     if fg is None:
-        sketch = Sketcher(image_name, [image, image_mask])
+        sketch = Sketcher(image_name, size, [image, image_mask])
     # Sketch dilated mask
     else:
-        sketch = DilatedSketcher(image_name, [image, image_mask, fg])
+        sketch = DilatedSketcher(image_name, size, [image, image_mask, fg])
         
     ws = False
     n = False
@@ -211,13 +216,18 @@ def displayTable(image, mask, usermask = None):
         usermask = np.stack((usermask,)*3, axis=-1)
         table_of_images = np.concatenate((image, usermask, mask, overlay), axis=1)
         window_name = 'Input Image / User Mask / Watershed Mask / Overlay'
-        cv2.imshow(window_name, table_of_images)
+        showWindowTable(table_of_images, window_name, 4)
         return window_name
     else:
         table_of_images = np.concatenate((image, mask, overlay), axis=1)
         window_name = 'Input Image / Mask / Overlay'
-        cv2.imshow(window_name, table_of_images)
+        showWindowTable(table_of_images, window_name, 3)
         return window_name
+
+def showWindowTable(table_of_images, window_name, num_contents):
+    cv2.namedWindow(window_name,flags=cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(window_name, size['width']*num_contents, size['height'])
+    cv2.imshow(window_name, table_of_images)
 
 def get_args():
     parser = argparse.ArgumentParser(description='Image masking',
@@ -231,7 +241,6 @@ def get_args():
     parser.add_argument('-c', '--configfile', type=str,
                         help='Configuration file', dest='config', default='config.yaml')
     return parser.parse_args()
-
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     args = get_args()

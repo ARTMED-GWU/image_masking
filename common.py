@@ -14,10 +14,12 @@ def maskOverlay(mask, img):
     return output
         
 class Sketcher:
-    def __init__(self, windowname, dests, color = 255):
+    def __init__(self, windowname, window_size, dests, color = 255):
         self.size = 3
         self.prev_pt = None
         self.windowname = windowname
+        cv2.namedWindow(self.windowname,flags=cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(self.windowname, **window_size)
         self.dests = dests
         self.color = color
         self.show()
@@ -66,8 +68,8 @@ class Sketcher:
         return
         
 class DilatedSketcher(Sketcher):
-    def __init__(self, windowname, dests):
-        super().__init__(windowname, dests, color = 128)
+    def __init__(self, windowname, window_size, dests):
+        super().__init__(windowname, window_size, dests, color = 128)
         self.dests[0] = maskOverlay(self.dests[2], self.dests[0])
         self.iter_val = 15
         self.diltrackname = 'Dilated Iterations'

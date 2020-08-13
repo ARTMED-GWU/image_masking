@@ -1,3 +1,14 @@
 # Used for filtering files with names matching the regex value (e.g. "*rgb*").
 # If do not wish to use filter, set to ~
 ffilter: ~
+
+#The width and height of the window size where images will be displayed.
+window_size:
+    width: 512
+    height: 512
+
+#Directory of images (e.g. 'data/imgs')
+dir_img: 'data/imgs'
+
+#Directory of masks where they will be saved at. (e.g. 'data/masks')
+dir_outmask: 'data/mask'
