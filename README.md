@@ -20,6 +20,7 @@ It is recommended to install anaconda to facilitate the management of packages. 
 5. Install OpenCV: 'conda install -c conda-forge opencv'
 6. Install Numpy (not needed if step 5 executed): 'conda install -c conda-forge numpy'
 7. Install Matplotlib: 'conda install -c conda-forge matplotlib'
+8. Install pyyaml: 'conda install -c anaconda pyyaml'
 
 ## Usage
 
