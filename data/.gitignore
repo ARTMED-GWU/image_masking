@@ -3,5 +3,9 @@
 
 #Except these contents
 !.gitignore
-!imgs
-!masks
+!imgs/
+imgs/*
+!imgs/jet/
+!imgs/rgb/
+
+!masks/

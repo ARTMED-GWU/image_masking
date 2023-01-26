@@ -12,3 +12,6 @@ dir_img: 'data/imgs'
 
 #Directory of masks where they will be saved at. (e.g. 'data/masks')
 dir_outmask: 'data/masks'
+
+#Boolean to determine if the program should predict the mask for the image.
+predict: true

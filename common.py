@@ -14,13 +14,17 @@ def maskOverlay(mask, img):
     return output
         
 class Sketcher:
-    def __init__(self, windowname, window_size, dests, color = 255):
+    def __init__(self, windowname, window_size, imgs, color = 255):
         self.size = 3
         self.prev_pt = None
         self.windowname = windowname
         cv2.namedWindow(self.windowname,flags=cv2.WINDOW_NORMAL)
         cv2.resizeWindow(self.windowname, **window_size)
-        self.dests = dests
+        self.imgs = [imgs[0], imgs[1]]  # keep jet and rgb to switch between them
+        self.disp_img = False # Use to know which image to display currently starting from 0
+        self.dests = [self.imgs[self.disp_img], imgs[2]]
+        if len(imgs) > 3:
+            self.dests.append(imgs[3])
         self.color = color
         self.show()
         self.sizetrackname = 'Line size'
@@ -47,6 +51,8 @@ class Sketcher:
             self.prev_pt = pt
         elif event == cv2.EVENT_LBUTTONUP or event == cv2.EVENT_RBUTTONUP:
             self.prev_pt = None
+        elif event == cv2.EVENT_MBUTTONDOWN:
+            self.switch_img()
         
         if self.prev_pt:
             if flags == cv2.EVENT_FLAG_LBUTTON:
@@ -66,11 +72,18 @@ class Sketcher:
     def mousewheel_events(self, flags):
         #Placeholder for mouse wheel events that exist on other classes
         return
+    
+    def switch_img(self):
+        self.disp_img = not self.disp_img
+        self.dests[0] = self.imgs[self.disp_img]
+        self.show()
+
         
 class DilatedSketcher(Sketcher):
-    def __init__(self, windowname, window_size, dests):
-        super().__init__(windowname, window_size, dests, color = 128)
-        self.dests[0] = maskOverlay(self.dests[2], self.dests[0])
+    def __init__(self, windowname, window_size, imgs):
+        super().__init__(windowname, window_size, imgs, color = 128)
+        self.imgs.append(imgs[3]) #Append ongoing mask as its used as the based image for sketching
+        self.dests[0] = maskOverlay(self.imgs[2], self.dests[0])
         self.iter_val = 15
         self.diltrackname = 'Dilated Iterations'
         cv2.createTrackbar(self.diltrackname, self.windowname, self.iter_val, 30, self.on_diltrackbar)
@@ -100,3 +113,8 @@ class DilatedSketcher(Sketcher):
                 self.dests[1] = cv2.erode(self.dests[1], None, iterations=1)
                 self.iter_val -= 1
             cv2.setTrackbarPos(self.diltrackname, self.windowname, self.iter_val)
+            
+    def switch_img(self):
+        self.disp_img = not self.disp_img
+        self.dests[0] = maskOverlay(self.imgs[2], self.imgs[self.disp_img])
+        self.show()

@@ -25,9 +25,9 @@ import cv2
 import fnmatch
 import yaml
 import numpy as np
-import matplotlib.pyplot as plt
 
 from common import Sketcher, DilatedSketcher
+from prediction import NerveMask
 from os.path import join, splitext, exists
 from os import listdir, mkdir, remove
 from sys import exit
@@ -41,10 +41,13 @@ from sys import exit
  
 state_file = "state.data"
 
-def main(proc_imgs, dir_img, dir_outmask, debug=False, skip=False, ffilter=None, window_size=None):
+def main(proc_imgs, dir_img, dir_outmask, debug=False, skip=False, ffilter=None, window_size=None, predict=True):
     
     assert dir_img is not None and dir_outmask is not None, f'Both dir_img and dir_outmask should not be set to None. Check config.yaml'
-        
+    
+    dir_img_jet = join(dir_img, "jet")
+    dir_img_rgb = join(dir_img, "rgb")
+    
     global size
     if window_size is not None:
         size = window_size
@@ -60,28 +63,52 @@ def main(proc_imgs, dir_img, dir_outmask, debug=False, skip=False, ffilter=None,
                     if not file.startswith('.')]
         pass
     
-    img_files = [file for file in listdir(dir_img)
+    img_files = [file for file in listdir(dir_img_jet)
                     if not file.startswith('.')
                     and (skip or not file in proc_imgs)
                     and (ffilter is None or fnmatch.fnmatch(file,ffilter))]
     
+    if predict:
+        #Inititate network for inference
+        nerve_mask = NerveMask()
+
+        
     for img_file in img_files:
         
         mask = None
         if masks and img_file in masks:
             mask = cv2.imread(join(dir_outmask, img_file), cv2.IMREAD_GRAYSCALE)
             
-        # Load the image and store into a variable
-        image = cv2.imread(join(dir_img, img_file))
+            
+        # Load the images and store into a variables
+        image = cv2.imread(join(dir_img_jet, img_file))
+        image2 = cv2.imread(join(dir_img_rgb, img_file))
+        
+        if image is None or image2 is None:
+            print(f'Both the RGB and Jet images need to exist for image masking. Please ensure this is the case for {img_file}. Moving on to next file.')
+            continue
+        
+        if predict:
+            #Make sure images are passed in RGB format
+            mask = nerve_mask.get_mask(cv2.cvtColor(image, cv2.COLOR_BGR2RGB), cv2.cvtColor(image2, cv2.COLOR_BGR2RGB)) * np.uint8(255) #birefrigence and rgb images passed
+            
+        elif mask is not None:
+            img_height, img_width, __ = image.shape
+            m_height, m_width = mask.shape
+        
+            if img_height != m_height or img_width != m_width:
+                mask = cv2.resize(mask,(img_width,img_height))
+                
+            __, mask = cv2.threshold(mask, 127, 255, cv2.THRESH_BINARY) #Ensure maintains binary
         
         f_n = splitext(img_file)[0]
      
-        image_mask, n, ws = sketchMask(image, f_n, mask = mask)
+        image_mask, n, ws = sketchMask(image, image2, f_n, mask = mask)
         
         if n:
             continue
 
-        out = createMask(image, image_mask, debug, ws)
+        out = createMask(image, image2, image_mask, debug, ws)
         
         kernel = np.ones((3,3),np.uint8)
         out = cv2.morphologyEx(out, cv2.MORPH_OPEN, kernel) # removing noise
@@ -103,7 +130,7 @@ def main(proc_imgs, dir_img, dir_outmask, debug=False, skip=False, ffilter=None,
                 out, n, ws = sketchMask(image, f_n, mask = out)
                 out = createMask(image, out, debug, ws)              
                 window_name = displayTable(image, out)
-            if ch == ord('n') or cv2.getWindowProperty(window_name,cv2.WND_PROP_VISIBLE) < 1:
+            if ch == ord('n'): #  or cv2.getWindowProperty(window_name,cv2.WND_PROP_VISIBLE) < 1:
                 break
         
         cv2.destroyAllWindows()
@@ -119,14 +146,14 @@ def main(proc_imgs, dir_img, dir_outmask, debug=False, skip=False, ffilter=None,
     logging.info("No further images to be processed.\n"
                      "If wish to reset state run the program with -r argument or to ignore state with -s argument.")
 
-def createMask(image, mask, debug, ws):
+def createMask(image, image2, mask, debug, ws):
     
     if not(ws):
       return mask.astype(np.uint8)         
     
     bg = cv2.dilate(mask, None, iterations=15)
     fg = cv2.erode(mask, None)
-    bg2 = sketchMask(image, "DilatedMask", bg, fg)[0]
+    bg2 = sketchMask(image, image2, "DilatedMask", bg, fg)[0]
     
     unknown = cv2.subtract(bg2,fg)
     
@@ -148,17 +175,17 @@ def createMask(image, mask, debug, ws):
     
     return finalmask.astype(np.uint8)
 
-def sketchMask(image, image_name, mask = None, fg = None):
+def sketchMask(image, image2, image_name, mask = None, fg = None):
     
     orig_mask = mask if mask is not None else np.zeros((image.shape[0], image.shape[1]), image.dtype)
     image_mask = orig_mask.copy()
     
     # Sketch a mask
     if fg is None:
-        sketch = Sketcher(image_name, size, [image, image_mask])
+        sketch = Sketcher(image_name, size, [image, image2, image_mask])
     # Sketch dilated mask
     else:
-        sketch = DilatedSketcher(image_name, size, [image, image_mask, fg])
+        sketch = DilatedSketcher(image_name, size, [image, image2, image_mask, fg])
         
     ws = False
     n = False
@@ -178,7 +205,7 @@ def sketchMask(image, image_name, mask = None, fg = None):
         if ch == ord(' '): # SPACE - reset the inpainting mask
             image_mask[:] = orig_mask
             sketch.show()
-        if ch == ord('n') or cv2.getWindowProperty(image_name,cv2.WND_PROP_VISIBLE) < 1:
+        if ch == ord('n'): #or cv2.getWindowProperty(image_name,cv2.WND_PROP_VISIBLE) < 1:
             n = True
             break
     
@@ -241,6 +268,7 @@ def get_args():
     parser.add_argument('-c', '--configfile', type=str,
                         help='Configuration file', dest='config', default='config.yaml')
     return parser.parse_args()
+
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO, format='%(levelname)s: %(message)s')
     args = get_args()
@@ -259,5 +287,8 @@ if __name__ == '__main__':
                 img_list = pickle.load(fr)
     
     print(__doc__)
+    
+    if args.debug:
+        import matplotlib.pyplot as plt
     
     main(img_list, debug=args.debug, skip=args.skip, **config)
